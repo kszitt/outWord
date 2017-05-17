@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>试题预览</title>
+</head>
+<body>
+	<textarea id="content" style="width: 100%; height: 100px;">请输入导出word内容</textarea>
+	<span id="outWord">导出word</span>
+	<div id="latexBox"></div>
+	<script type="text/javascript" src="/omml.js"></script>
+    <script type="text/javascript" src="/jquery.min.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS_HTML-full"></script>
+	<script type="text/x-mathjax-config">
+		MathJax.Hub.Config({
+		  TeX: { extensions: ['mhchem.js',"extpfeil.js"] }
+		});
+	</script>
+	<script>
+		var str = '发电机房';
+		encodeURI(str);
+		console.log(str);
+		var latexBox = $('#latexBox'),
+			content = $('#content'),
+			outWord = $('#outWord');
+		// 导出word
+		outWord.on('click', function(){
+			var html = content.val();
+			var fileName = prompt('请输入导出word文件名');
+			latexBox.html('<p>'+ html +'</p>');
+			// 判断是否有公式
+			if(/\\[\(\[].+?\\[\)\]]/.test(html)){
+				MathJax.Hub.Queue(["Typeset", MathJax.Hub, latexBox[0]]);	// latex转换成公式
+			}
+			setTimeout(function(){
+				html = latexBox.html();
+				// 文本转换成office代码
+				var obj = new StrToOutWord(html);
+				var params = {
+					'evalStr': obj.str,
+					'fileName': encodeURI(fileName),
+					'imgUrl': obj.imgUrl
+				}
+				$.post('/outWord', params, function(data){
+					if(data.msg === 'success'){
+						location.href = '/outWord/'+ fileName +'.doc';
+					}
+					console.log(data);
+				});
+			}, 1000);
+		});
+    </script>
+</body>
+</html>

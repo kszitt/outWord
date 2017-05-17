@@ -5,10 +5,10 @@
  *   docx.createP();                 添加p标签
  *   pObj.options.align = 'center'   居中
  *   docx.createIndentList(num)      缩进值（0无效）
- *   docx.createLists(5位区别码, 类型(一、1.1、a）A)等), 宽度(num));    自动添加列表数字、字母
+ *   docx.createLists(id, 类型(一、1.1、a）A)等), 宽度(num));    自动添加列表数字、字母
  * */
 function StrToOutWord(str) {
-    this.str = str;
+    this.str = 'var pObj = null; '+ str;
     this.imgUrl = str.match(/http:\/\/.+?\.(png|jpg|jpeg|gif)/g);   // 获取所有图片的地址
     this.transformDom();    // 文本添加标签，latex转换成mathml
     this.toOfficegen();     // 文本转换成officegen代码
@@ -54,7 +54,7 @@ StrToOutWord.prototype = {
         this.str = this.str.replace(/<img.+?\.(png|jpg|jpeg|gif)"\s*\/>/g, function (img) {
             var url = img.match(/http:\/\/.+?\.(png|jpg|jpeg|gif)/)[0];
             url = url.substring(url.lastIndexOf('/') + 1).replace(/"/g, '\\"'); //获得图片名称
-            return 'pObj.addImage(path.resolve(__dirname,"../../public/outWord/' + url + '")); ';
+            return 'pObj.addImage(docx, path.resolve(__dirname,"../../public/outWord/' + url + '")); ';
         });
     },
     // 添加文本（处理span标签样式）
@@ -208,11 +208,11 @@ StrToOutWord.prototype = {
     officegenP: function () {
         this.str = this.str.replace(/<p.*?>/g, function (word) {
             // 缩进
-            if(/indent:.+?;/.test(word)) return 'pObj = docx.createIndentList("'+ parseInt(word.match(/indent:.+?;/)[0].outBoth('indent:', ';')) +'"); ';
+            if(/indent:.+?;/.test(word)) return 'pObj = docx.createP({indent: "'+ parseInt(word.match(/indent:.+?;/)[0].outBoth('indent:', ';').trim()) +'"}); ';
             // lists
-            if (/lists:.+?;/.test(word)) return 'pObj = docx.createLists("' + word.match(/lists:.+?;/)[0].outBoth('lists:\\s*', ';') + '"); ';
+            if (/lists:.+?;/.test(word)) return 'pObj = docx.createP({lists: "' + word.match(/lists:.+?;/)[0].outBoth('lists:\\s*', ';').trim() + '"}); ';
             // 对齐方式
-            if (/text-align:.+?;/.test(word)) return 'pObj = docx.createP(); pObj.options.align = "' + word.match(/text-align:.+?;/)[0].outBoth('text-align:', ';') + '"; ';
+            if (/text-align:.+?;/.test(word)) return 'pObj = docx.createP({align: "' + word.match(/text-align:.+?;/)[0].outBoth('text-align:', ';').trim() + '"}); ';
             // 不带样式的p标签
             return 'pObj = docx.createP(); ';
         });
@@ -242,29 +242,22 @@ StrToOutWord.prototype = {
 // mathml转换成omml
 function MathmlToOmml(mml) {
     this.mml = mml;
-    this.domArr = ['msup', 'msub', 'mfrac', 'msqrt', 'mroot', 'msubsup', 'munderover', 'mover', 'mtable', 'munder'];
+    this.domArr = ['msup', 'msub', 'mfrac', 'msqrt', 'mroot'];
     this.symbol = {"^": "", "~": "̃", "←": "⃖", "→": "⃗"};
     this.ctrlPr = '<m:ctrlPr><w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/></w:rPr></m:ctrlPr>';
     this.rPr = '<m:rPr><m:sty m:val="p"/></m:rPr><w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/></w:rPr>';
     this.smallRpr = '<w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/></w:rPr>';
     this.domAddNum();   // 给所有mathml标签添加数字
     this.replaceMath(); // 替换math标签
-    this.replaceMtable(); // 替换mtable标签
-    this.replaceSinglebracket(); // 替换单括号
     this.replaceBrackets(); // 替换各种括号 ([|{
-    this.replaceMfrac(); // 替换mfrac标签
-    this.replaceMsup(); // 替换msup标签
-    this.replaceMsub(); // 替换msub标签
-    this.replaceMsqrt(); // 替换msqrt标签
-    this.replaceMroot(); // 替换mroot标签
-    this.replaceMunderover(); // 替换munderover标签
-    this.replaceMsubsup(); // 替换msubsup标签
-    this.replaceMunder(); // 替换munder标签
-    this.replaceMover(); // 替换mover标签
-    this.replacemMspace(); // 替换空格
+    this.replaceMfrac(); // 替换mfrac标签（分数）
+    this.replaceMsup(); // 替换msup标签（上标）
+    this.replaceMsub(); // 替换msub标签（下标）
+    this.replaceMsqrt(); // 替换msqrt标签（开方）
+    this.replaceMroot(); // 替换mroot标签（开n次方）
+    this.replacemMspace(); // 空格
     this.multipleText(); // 合并多个连续文本
     this.otherDom(); // 处理其他标签
-    this.lowercaseToCapital();  // 小写标签改成大写标签
 }
 
 MathmlToOmml.prototype = {
@@ -274,12 +267,7 @@ MathmlToOmml.prototype = {
         this.domArr.forEach(function (dom) {
             var domIndex = 0;
             // 标签开始部分添加数字
-            _this.mml = _this.mml.replace(eval('/<'+ dom +'\\s*[\\sA-z\\d="]*>/g'), function(word) {
-                if(dom === 'msub' && /^<msubsup/.test(word)){
-                    return word;
-                } else if(dom === 'munder' && /^<munderover/.test(word)){
-                    return word;
-                }
+            _this.mml = _this.mml.replace(eval('/<' + dom + '\\s*[\\sA-z\\d="]*>/g'), function (word) {
                 domIndex++;
                 return word.replace(eval('/^<' + dom + '/'), '<' + dom + domIndex);
             });
@@ -367,66 +355,10 @@ MathmlToOmml.prototype = {
             return mml.replace(/^<math.+?>/, mathStart).replace(/<\/math>$/, mathEnd);
         });
     },
-    // 堆栈
-    replaceMtable: function(){
-        var mtable = this.getDomMaxIndex('mtable');
-        var _this = this;
-        for(var i = 1; i <= mtable; i++){
-            _this.mml = _this.mml.replace(eval('/<mo[A-z\\d="\\s]*>.*?<\\/mo><mtable'+ index +'[A-z\\d="\\s]*>.+<\\/mtable'+ index +'><mo[A-z\\d="\\s]*>.*?<\\/mo>/'), function(word){
-                var begChr = word.match(/^<mo[A-z\d="\s]*>.*?<\/mo>/)[0].replace(/<\/?mo[A-z\d="\s]*>/g, "");         // 括号类型
-                var endChr = word.match(/<mo[A-z\d="\s]*>.{1,10}<\/mo>$/)[0].replace(/<\/?mo[A-z\d="\s]*>/g, "");         // 括号类型
-                word = word.replace(/^<mo[A-z\d="\s]*>.*?<\/mo><mtable\d+[A-z\d="\s]*>/, "").replace(/<\/mtable\d+><mo[A-z\d="\s]*>.*?<\/mo>$/, "");    // 获取里面的内容
-                word = $(word);
-                var me = "";
-                word.each(function(index, mtr){
-                    mtr = $(mtr);
-                    mtr.each(function(i, mtd){  //  &amp;为分栏标志
-                        mtd = mtd.innerHTML.replace(/^<mtd>/, "").replace(/<\/mtd>$/, "").replace(/<\/mtd><mtd>/g, '  &amp;');
-                        me += "<m:e>"+ mtd +"</m:e>";
-                    });
-                });
-                return '<m:d><m:dPr><m:begChr m:val="'+ begChr +'"/><m:endChr m:val="'+ endChr +'"/>' + _this.ctrlPr + '</m:dPr><m:e><m:eqArr><m:eqArrPr>' + _this.ctrlPr + '</m:eqArrPr>'+ me +'</m:eqArr></m:e></m:d>';
-            });
-        }
-    },
-    // 替换单括号
-    replaceSinglebracket: function(){
-        var _this = this;
-        this.mml = this.mml.replace(/(<mo\sfence="true"\sstretchy="true"\ssymmetric="true"><\/mo>.+?<mo[\sA-z="]*>(\||\}|\)|\])<\/mo>|<mo[\sA-z="]*>(\||\{|\(|\[)<\/mo>.+?<mo\sfence="true"\sstretchy="true"\ssymmetric="true"><\/mo>)/g, function(word){
-            word = $(word);
-            var begChr = "",
-                ctn = "",
-                endChr = "";
-            word.each(function(index, item){
-                switch(index){
-                    case 0: // 括号类型
-                        begChr = item.innerHTML;
-                        break;
-                    case word.length - 1: // 括号类型
-                        endChr = item.innerHTML;
-                        break;
-                    default :   // 内容
-                        item = $(item);
-                        // 单括号特殊处理
-                        item.children('mn').addClass('smallRpr');
-                        item.children('mi').addClass('smallRpr');
-                        item.children('mo').addClass('smallRpr');
-                        ctn += _this.removeMrow(item[0].outerHTML);
-                }
-            });
-            // 紧跟着上下标时特殊处理
-            var msup = "";
-            if(/<(msup|msub)\d+>$/.test(ctn)){
-                msup = ctn.match(/<(msup|msub)\d+>$/)[0];
-                ctn = ctn.replace(/<(msup|msub)\d+>$/, "");
-            }
-            return msup + '<m:d><m:dPr><m:begChr m:val="'+ begChr +'"/><m:endChr m:val="'+ endChr +'"/>'+ _this.ctrlPr +'</m:dPr><m:e>'+ ctn +'</m:e></m:d>';
-        });
-    },
     // 替换各种括号 ([|{
     replaceBrackets: function () {
         var _this = this;
-        this.mml = this.mml.replace(/(<mo[\sA-z="]*>\(<\/mo>.+?<mo[\sA-z="]*>\)<\/mo>|<mo[\sA-z="]*>\[<\/mo>.+?<mo[\sA-z="]*>\]<\/mo>|<mo[\sA-z="]*>\{<\/mo>.+?<mo[\sA-z="]*>\}<\/mo>|<mo[\sA-z="]*>\|<\/mo>.+?<mo[\sA-z="]*>\|<\/mo>)/g, function (word) {
+        this.mml = this.mml.replace(/(<mo[\sA-z="]*>\(<\/mo>.+?<mo[\sA-z="]*>\)<\/mo>|<mo[\sA-z="]*>\[<\/mo>.+?<mo[\sA-z="]*>\]<\/mo>|<mo[\sA-z="]*>\{<\/mo>.+?<mo[\sA-z="]*>\}<\/mo>|<mo[\sA-z="]*>\|<\/mo>.+?<mo[\sA-z="]*>\|<\/mo>|<mo fence="true" stretchy="true" symmetric="true"><\/mo>.+?<mo[\sA-z="]*>(\||\}|\)|\])<\/mo>)/g, function (word) {
             word = $(word);
             var begChr = "",
                 ctn = "",
@@ -578,158 +510,6 @@ MathmlToOmml.prototype = {
             });
         }
     },
-    // 积分
-    replaceMunderover: function(){
-        var munderover = this.getDomMaxIndex('munderover');
-        var _this = this;
-        for(var i = 1; i <= munderover; i++){
-            _this.mml = _this.mml.replace(eval('/<munderover'+ i +'>.+<\\/munderover'+ i +'>/'), function(word){
-                word = word.replace(eval('/^<munderover'+ i +'>/'), "").replace(eval('/<\\/munderover'+ i +'>/'), "");
-                word = $(word);
-                var chr = '',   // 符号
-                    sub = "",   // 下标
-                    sup = "",   // 上标
-                    limLoc = 'undOvr';  // 上下标类型
-                word.each(function(index, item){
-                    item = $(item);
-                    switch(index){
-                        case 0:
-                            chr = item.text();
-                            break;
-                        case 1:
-                            if(/^<mpadded/.test(item[0].outerHTML)){
-                                sub = item[0].innerHTML;
-                                //limLoc = 'undOvr'
-                            } else {
-                                sub = _this.removeMrow(item[0].outerHTML);
-                            }
-                            break;
-                        case 2:
-                            if(/^<mpadded/.test(item[0].outerHTML)){
-                                sup = item[0].innerHTML;
-                                //limLoc = 'undOvr'
-                            } else {
-                                sup = _this.removeMrow(item[0].outerHTML);
-                            }
-                            break;
-                    }
-                });
-                return '<m:nary><m:naryPr><m:chr m:val="'+ chr +'"/><m:limLoc m:val="'+ limLoc +'"/>'+ _this.ctrlPr +'</m:naryPr><m:sup>'+ sup +'</m:sup><m:sub>'+ sub +'</m:sub><m:e><mo> </mo></m:e></m:nary>';
-            });
-        }
-    },
-    // 上标下标
-    replaceMsubsup: function(){
-        var msubsup = this.getDomMaxIndex('msubsup');
-        var _this = this;
-        for(var i = 1; i <= msubsup; i++){
-            _this.mml = _this.mml.replace(eval('/<msubsup'+ i +'>.+<\\/msubsup'+ i +'>/'), function(word){
-                word = word.replace(eval('/^<msubsup'+ i +'>/'), "").replace(eval('/<\\/msubsup'+ i +'>/'), "");
-                word = $(word);
-                var me = '',   // 符号
-                    sub = "",   // 下标
-                    sup = "";   // 上标
-                word.each(function(index, item){
-                    item = $(item);
-                    switch(index){
-                        case 0:
-                            me = _this.removeMrow(item[0].outerHTML);
-                            break;
-                        case 1:
-                            item.children('mn').addClass('smallRpr');
-                            item.children('mi').addClass('smallRpr');
-                            item.children('mo').addClass('smallRpr');
-                            sub = _this.removeMrow(item[0].outerHTML);
-                            break;
-                        case 2:
-                            item.children('mn').addClass('smallRpr');
-                            item.children('mi').addClass('smallRpr');
-                            item.children('mo').addClass('smallRpr');
-                            sup = _this.removeMrow(item[0].outerHTML);
-                            break;
-                    }
-                });
-                // sup为空时
-                if(/^<mspace/.test(sup)) {
-                    sup = '<m:sup><mo> </mo></m:sup>';
-                } else {
-                    sup = '<m:sup>'+ sup +'</m:sup>';
-                }
-                // sub为空时
-                if(/^<mspace/.test(sub)) {
-                    sub = '<m:sub><mo> </mo></m:sub>';
-                } else {
-                    sub = '<m:sub>'+ sub +'</m:sub>';
-                }
-                return '<m:sSubSup><m:sSubSupPr>'+ _this.ctrlPr +'</m:sSubSupPr><m:e>'+ me +'</m:e>'+ sub + sup +'</m:sSubSup>';
-            });
-        }
-    },
-    // 函数
-    replaceMunder: function(){
-        var munder = this.getDomMaxIndex('munder');
-        var _this = this;
-        for(var i = 1; i <= munder; i++){
-            _this.mml = _this.mml.replace(eval('/<munder'+ i +'[A-z\\d="\\s]*>.+<\\/munder'+ i +'>/'), function(word){
-                word = word.replace(/^<munder\d+[A-z\d="\s]*>/, "").replace(/<\/munder\d+>$/, "");      // 获取里面的内容
-                word = $(word);
-                var fName = "", // 函数名
-                    lim = "";   // 函数参数
-                word.each(function(index, item){
-                    switch(index){
-                        case 0:
-                            fName = item.outerHTML;
-                            break;
-                        case 1:
-                            lim = item.innerHTML;
-                            break;
-                    }
-                });
-                return '<m:func><m:funcPr>' + _this.ctrlPr + '</m:funcPr><m:fName><m:limLow><m:limLowPr>' + _this.ctrlPr + '</m:limLowPr><m:e>' + fName + '</m:e><m:lim>' + lim + '</m:lim></m:limLow></m:fName><m:e><mo> </mo></m:e></m:func>';
-            });
-        }
-    },
-    // mover
-    replaceMover: function(){
-        var mover = this.getDomMaxIndex('mover');
-        var _this = this;
-        for(var i = 1; i <= mover; i++){
-            _this.mml = _this.mml.replace(eval('/<mover'+ i +'>.+<\\/mover'+ i +'>/'), function(word){
-                word = word.replace(/^<mover\d+>/, "").replace(/<\/mover\d+>$/, "");
-                word = $(word);
-                var chr = '',   // 符号
-                    me = '';    // 内容
-                word.each(function(index, item){
-                    item = $(item);
-                    var outerHtml = item[0].outerHTML;
-                    switch(index){
-                        case 0:
-                            // 判断是否是化学式
-                            if(/^<mpadded/.test(word.eq(1)[0].outerHTML)){
-                                chr = _this.symbolToWord(item.text());
-                            } else {
-                                me = outerHtml;
-                            }
-                            break;
-                        case 1:
-                            // 判断是否是化学式
-                            if(/^<mpadded/.test(outerHtml)){
-                                me = item[0].innerHTML;
-                            } else {
-                                chr = _this.symbolToWord(item.text());
-                            }
-                            break;
-                    }
-                });
-                // 判断是否是化学式
-                if(/^<mpadded/.test(word.eq(1)[0].outerHTML)){
-                    return '<m:box><m:boxPr><m:opEmu m:val="on"/>'+ _this.ctrlPr + '</m:boxPr><m:e><m:groupChr><m:groupChrPr><m:chr m:val="'+ chr +'"/><m:vertJc m:val="bot"/>'+ _this.ctrlPr + '</m:groupChrPr><m:e>'+ me +'</m:e></m:groupChr></m:e></m:box>';
-                } else {
-                    return '<m:acc><m:accPr><m:chr m:val="'+ chr +'"/>'+ _this.ctrlPr + '</m:accPr><m:e>'+ me +'</m:e></m:acc>';
-                }
-            });
-        }
-    },
     // 空格
     replacemMspace: function () {
         this.mml = this.mml.replace(/<mspace.+?\/>/g, function (space) {
@@ -759,36 +539,6 @@ MathmlToOmml.prototype = {
         this.mml = this.mml.replace(/&#[A-z\d]+;/g, function (word) {
             return $('<p>' + word + '</p>').text();
         });
-    },
-    // 小写标签改成大写标签
-    lowercaseToCapital: function(){
-        this.mml = this.mml.replace(/<?\/?(m:ssub|m:ssup|m:ssubsup|m:[a-z]+pr|m:[a-z]+chr|w:rfonts|w:hansi|m:opemu|m:vertjc|m:fname|m:limlow|m:deghide)>?/g, function(word){
-            var dom = word.replace(/<|\/|>/g, "");
-            switch(dom){
-                case 'm:ssubsup': word.replace(/m:ssubsup>?$/, 'm:sSubSup');
-                    break;
-                case 'm:ssub': word.replace(/m:ssub>?$/, 'm:sSub');
-                    break;
-                case 'm:ssup': word.replace(/m:ssup>?$/, 'm:sSup');
-                    break;
-                case 'w:rfonts': word.replace(/w:rfonts>?$/, 'w:rFonts');
-                    break;
-                case 'w:hansi': word.replace(/w:hansi>?$/, 'w:hAnsi');
-                    break;
-                case 'm:vertjc': word.replace(/m:vertjc>?$/, 'm:vertJc');
-                    break;
-                case 'm:fname': word.replace(/m:fname>?$/, 'm:fName');
-                    break;
-                case 'm:limlow': word.replace(/m:limlow>?$/, 'm:limLow');
-                    break;
-                case 'm:deghide': word.replace(/m:deghide>?$/, 'm:degHide');
-                    break;
-                default:
-                    word = word.replace(/pr/, 'Pr');
-                    word = word.replace(/chr/, 'Chr');
-            }
-            return word;
-        });
     }
 };
 
@@ -816,7 +566,6 @@ String.prototype.stringToHtml = function () {
                 break;
         }
     });
-                            // 没有标签的文本
     // 处理img标签
     str = str.replace(/<img/g, '<spanimg');
     str = str.replace(/\.(png|jpg|jpeg|gif)"\s*\/>/g, function (img) {

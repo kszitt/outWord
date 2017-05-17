@@ -15,7 +15,7 @@ var downImg = function (urls, callback) {
                     imgData += chunk;
                 });
                 res.on("end", function () {
-                    fs.writeFile(path.resolve(__dirname, "../../public/outWord/" + imgName), imgData, "binary", function (err) {
+                    fs.writeFile(path.resolve(__dirname, imgName), imgData, "binary", function (err) {
                         if (err) {
                             console.log("down fail");
                         }

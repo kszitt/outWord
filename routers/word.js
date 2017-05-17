@@ -2,25 +2,16 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
-var logModel=require('../../utils/logs/logModel');
 const http = require('http');
 const Img = require('./img');
+const Docx = require('./officegenDocx');
 
 
 router.post('/', function (req, res) {
-    const officegen = require('officegen');
-    var docx = officegen('docx');
     var params = req.body;
     var evalStr = params.evalStr;
     var fileName = params.fileName;
     var imgUrl = params.imgUrl;
-    docx.on('finalize', function (written) {
-        console.log("创建文件");
-    });
-    docx.on('error', function (err) {
-        res.send(err);
-        console.log(err);
-    });
     if (imgUrl && imgUrl !== '') {
         // 下载图片
         imgUrl = imgUrl.split(',');
@@ -42,22 +33,19 @@ router.post('/', function (req, res) {
     // 导出word
     function outWordHtml() {
         try {
-            console.log(evalStr);
+            var docx = new Docx();
             eval(evalStr);
-            // 创建文件
-            var out = fs.createWriteStream(path.resolve(__dirname, '../../public/outWord/' + decodeURI(fileName) + ".docx"));
-            docx.generate(out, false, function () {
-                new logModel({
-                    operationType:'导出',
-                    product:'资源库',
-                    objectType:'导出word',
-                    objectTab:'',
-                    name:req.session.user.name,
-                    code:'',
-                    time:new Date().getTime()
-                }).save();
-                res.send({
-                    msg: 'success'
+            docx.toXml();
+            var xml = docx.xml;
+            var outWordPath = path.resolve(__dirname, '../public/outWord/'+ decodeURI(fileName) +'.xml');
+            fs.writeFile(outWordPath, xml, function (err) {
+               if(err) res.send(err.toString());
+               console.log('写入成功');
+                fs.rename(outWordPath, outWordPath.replace(/xml$/, 'doc'), function (err) {
+                    if (err) res.send(err.toString());
+                    res.send({
+                        msg: 'success'
+                    });
                 });
             });
         } catch (err) {
