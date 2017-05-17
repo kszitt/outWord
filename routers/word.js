@@ -37,7 +37,7 @@ router.post('/', function (req, res) {
             eval(evalStr);
             docx.toXml();
             var xml = docx.xml;
-            var outWordPath = path.resolve(__dirname, '../public/outWord/'+ decodeURI(fileName) +'.xml');
+            var outWordPath = path.resolve(__dirname, '../public/word/'+ decodeURI(fileName) +'.xml');
             fs.writeFile(outWordPath, xml, function (err) {
                if(err) res.send(err.toString());
                console.log('写入成功');

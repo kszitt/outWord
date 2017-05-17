@@ -46,7 +46,7 @@
 				}
 				$.post('/outWord', params, function(data){
 					if(data.msg === 'success'){
-						location.href = '/outWord/'+ fileName +'.doc';
+						location.href = '/word/'+ fileName +'.doc';
 					}
 					console.log(data);
 				});

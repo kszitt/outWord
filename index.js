@@ -30,7 +30,7 @@ function deleteFolderRecursive(path) {
         });
     }
 };
-deleteFolderRecursive(path.resolve(__dirname, './public/outWord'));
+deleteFolderRecursive(path.resolve(__dirname, './public/word'));
  
 app.listen(7777, function(err){
 	if(err) throw err;
